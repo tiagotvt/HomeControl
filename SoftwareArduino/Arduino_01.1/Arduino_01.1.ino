@@ -21,6 +21,7 @@ String check = "";
 String MAC = "";
 char c;
 int i = 0;
+int conn;
 
 void setup()
 {
@@ -40,7 +41,7 @@ void loop() // run over and over
   if (ROLE == 1)
   {
   mySerial.write("AT+ROLE0");  //mantem o bluetooth em modo de slave, para que outros possam se conectar a ele
-    delay(500);
+    delay(800);
     while (mySerial.available())
     Serial.write(mySerial.read());
     Serial.write("\n");
@@ -51,12 +52,18 @@ void loop() // run over and over
       if (digitalRead(botao) == 1)  //verifica o estado do botao e executa se ele estiver pressionado
       {
           Serial.write("\nbotao\n");  //avisa que a rotina foi iniciada
-          
-          
+                  
           //bloco de conexao
           MAC = "78A5048C47AF";
-          if (connect(MAC,0) == 1) Serial.print("conectou\n");
-          else Serial.print("erro\n");
+          conn = connect(MAC,0);
+          if (conn == 1) Serial.print("conectou\n");
+          else
+          { 
+          Serial.print("conn = ");  
+          Serial.print(conn);
+          if (conn == 0) Serial.print("erro\n");
+          if (conn == -1) Serial.print("erro desconhecido\n");
+          }
           ROLE = 1;  //variavel de controle (o arduino nao sabe se o modulo esta como master ou slave)          
 
           }
@@ -87,27 +94,58 @@ void loop() // run over and over
 
 int connect(String MAC, int err)
 {
+          if(err == 0)
+          {
           mySerial.write("AT+ROLE1");  //coloca o modulo em modo master para se conectar a outro 
-          delay(800);
+          delay(1500);
           mySerial.flush();
+          }
           mySerial.print("AT+CON");  //conecta com o modulo especificado pelo mac
           mySerial.print(MAC);
-          delay(800);
-          while (mySerial.available() > 0)  //transfere o buffer do mySerial para a string check
+          delay(1000);
+          while (mySerial.available() > 0)  //transfere o buffer do mySerial para a string check --- intenção é receber OK+CONNA
           {
               c = mySerial.read();
               check += c;
+              Serial.print(c); //debug
           }
-          if (check == "OK+CONNAOK+CONN")    //verifica se a conexao foi efetuada 
+          Serial.print("\n"); //debug
+         
+          if (check == "OK+CONNA") //se verificado que o módulo entendeu o comando, limpa a string e prossegue
+          {
+          check.remove(0); //se o ble entendeu o comando, limpa a string e prossegue
+          Serial.print("milestone 1\n"); //debug
+          }
+          else 
+          {
+          if (check == "OK+CONNAOK+CONN") return(1); //para o caso da conexão ser estabelecida entre uma tentativa e outra
+          else return (-1); //se nao, retornar erro desconhecido
+          }
+          while(!mySerial.available()) {} //espera a segunda parte da mensagem
+          
+          Serial.print("milestone 3\n"); //debug
+          
+          while (mySerial.available() > 0)  //transfere o buffer do mySerial para a string check ---- a intenção é identificar o OK+CONN ou o OK+CONNF
+          {
+              c = mySerial.read();
+              check += c;
+              Serial.print(c); //debug
+              delay(10);  //TIRAR ESSE DELAY QUEBRA O CODIGO DE JEITOS BIZARROS!!! 
+          }
+          Serial.print("\n"); //debug
+          
+          if (check == "OK+CONN")    //verifica se a conexao foi efetuada 
           {
           check.remove(0);
           return (1);
           }
-          else    //caso a conexao tenha falhado, tenta novamente ate 5 vezes
+          else    //caso a conexao tenha falhado, tenta novamente até 3 vezes
           {
+              Serial.print("\nmilestone 2\n"); //debug
               err++;
+              Serial.print(err); //debug
               check.remove(0);
-              if (err >= 5) return (0);
-              else connect (MAC, err);     
+              if (err >= 3) return (0);
+              else return(connect(MAC, err));     
           }
 }
