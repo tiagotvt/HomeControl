@@ -6,6 +6,7 @@ Limpar o buffer serial antes de checar mensagem >> mySerial.flsuh()
 
 MASTER mac address: 78A5048C378C
 YELLOW mac address: 78A5048C47AF
+GREEN mac address:  78A5048C4A04
 
 */
 
