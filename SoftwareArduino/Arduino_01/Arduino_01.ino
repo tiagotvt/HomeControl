@@ -11,20 +11,25 @@ GREEN mac address:  78A5048C4A04
 */
 
 #include <SoftwareSerial.h>
+#include "packet.h"
 
 
-
-SoftwareSerial mySerial(11, 10); // RX, TX
+//SoftwareSerial mySerial(11, 10); // RX, TX
 const int botao1 = 9;     // the number of the pushbutton pin
+const int botao3 = 8;
 const int botao2 = 2; 
 int ROLE = 1;    //variavel que armazena o estado do bluetooth
-//char string check[20];  //string para armazenar mensagens de confirmacao
 String check = "";
 String MAC = "";
+String stin = "";
+String stout = "";
 char c;
 int i = 0;
 int conn;
-int dconn;
+char sum;
+char cs;
+
+packet pkt, pkin, pkout;
 
 void setup()
 {
@@ -44,69 +49,135 @@ void setup()
 
 void loop() // run over and over
 {
-  if (ROLE == 1)
-  {
-  mySerial.write("AT+ROLE0");  //mantem o bluetooth em modo de slave, para que outros possam se conectar a ele
-    delay(800);
-    while (mySerial.available())
-    Serial.write(mySerial.read());
-    Serial.write("\n");
-  ROLE = 0;
-//  Serial.write("setou 0");
-  }
+  
+//slave
+      if (ROLE == 1 && conn != 1)
+      {
+          mySerial.write("AT+ROLE0");  //mantem o bluetooth em modo de slave, para que outros possam se conectar a ele
+          delay(800);
+          while (mySerial.available())
+          Serial.write(mySerial.read());
+          Serial.write("\n");
+          ROLE = 0;
+      }
 
+          MAC = "78A5048C47AF";
+//conecta
       if (digitalRead(botao1) == 1)  //verifica o estado do botao e executa se ele estiver pressionado
       {
           Serial.write("\n\nconectando\n");  //avisa que a rotina foi iniciada
                   
           //bloco de conexao
-          MAC = "78A5048C47AF";
           conn = connect(MAC,0);
           if (conn == 1) Serial.print("conectou\n");
           else
           { 
-          Serial.print("conn = ");  
-          Serial.print(conn);
           if (conn == 0) Serial.print("erro\n");
           if (conn == -1) Serial.print("erro desconhecido\n");
           }
           ROLE = 1;  //variavel de controle (o arduino nao sabe se o modulo esta como master ou slave)          
 
           }
-          
+
+//desconecta
       if (digitalRead(botao2) == 1)  //verifica o estado do botao e executa se ele estiver pressionado
       {
           Serial.write("\n\ndesconectando\n");  //avisa que a rotina foi iniciada
           //bloco de desconexão
-          dconn = disconnect();
-          if (dconn == 0) Serial.write("desconectado");        
+          conn = disconnect();
+          if (conn == 0) Serial.write("desconectado");        
           else Serial.write("Ja estava desconectado");
       } 
-         
-         //bloco de transmissao
-         
-//          mySerial.write("teste");
-//          delay(800);
-//          mySerial.write("AT");  //desconecta os modulos
-//          delay(800);
-//              while (mySerial.available())  //printa tudo que esta no bufffer
-//              Serial.write(mySerial.read());
-//              Serial.write("\n");
-         
+      
+//envia
+      if (digitalRead(botao3) == 1)  //verifica o estado do botao e executa se ele estiver pressionado
+      {
+              Serial.write("enviando\n");
+              send(MAC,"cstart");
+              pkin = getpkt();
+              if (pkin.data == "okstart")
+              {
+                  send(MAC,"banana");
+                  pkin = getpkt();
+                  Serial.print(pkin.data);
+              }
+              else Serial.write("nao startou\n");
+      }
 
-//      if (mySerial.available() == "teste")
-//        Serial.write("entendi");
+//recebe 
+      if (mySerial.available())    
+      {
+          stin = getstr();
+          if (stin == "OK+CONN")
+          {
+              pkin = getpkt();
+              if (pkin.data == "cstart")
+              {
+                  send(pkin.ids,"okstart");
+                  pkin = getpkt();
+                  cs = pkin.cs;
+                  sum = checksum(pkin.data);
+                  if (cs == sum)
+                  {
+                      Serial.write("checksum ok!\n");
+                      send(pkin.ids,"checksum ok!"); 
+                  }
+                  else
+                  { 
+                      Serial.print(pkin.data);
+                      Serial.write(" : ");
+                      Serial.print(sum);
+                      Serial.write("\n");
+                      Serial.write("checksum falhou!\n");                 
+                      send(pkin.ids,"checksum falhou");
+                  }
+              }
+          }
+      }
     
-  //loop para passar as mensagens entre o serial virtual e o TX RX (serve para permitir que voce mande comandos ao modulo pelo terminal)    
-  if (mySerial.available())
-    Serial.write(mySerial.read());
-  if (Serial.available())
-    mySerial.write(Serial.read());
-
+    
+//loop para passar as mensagens entre o serial virtual e o TX RX (serve para permitir que voce mande comandos ao modulo pelo terminal)    
+/*      if (mySerial.available())
+          Serial.write(mySerial.read());
+      if (Serial.available())
+          mySerial.write(Serial.read());
+*/
 }
 
 //------------------------------------------------------END LOOP------------------------------------------------------------
 
+//------------------------------------------------------GETSTRING--------------------------------------------------------------
+String getstr()
+{
+      String buff = "";
+      int i = 0;
+      
+      while(!mySerial.available() && i<1000 ) //espera a informacao comecar a chegar. Se demorar mais de 5s cancela
+      {
+          i++;
+          delay(5);
+      }
+
+      if (i == 1000)
+      {
+          Serial.write("sem dados no serial\n");
+          return("0");
+      }
+  
+      while (mySerial.available() > 0)  //transfere o buffer do mySerial para a string buff
+      {
+          c = mySerial.read();
+          buff += c;
+          delay(10);  //sem esse delay o while acaba antes de todos os dados passarem
+      }
+      
+      Serial.print(buff); //debug
+      Serial.print("\n"); //debug
+
+      return(buff);
+}
+      
+//------------------------------------------------------END GETSTRING----------------------------------------------------------
 
 //------------------------------------------------------CONNECT-------------------------------------------------------------
 int connect(String MAC, int err)
@@ -119,42 +190,24 @@ int connect(String MAC, int err)
           }
           mySerial.print("AT+CON");  //conecta com o modulo especificado pelo mac
           mySerial.print(MAC);
-          delay(1000);
-          while (mySerial.available() > 0)  //transfere o buffer do mySerial para a string check --- intenção é receber OK+CONNA
-          {
-              c = mySerial.read();
-              check += c;
-              Serial.print(c); //debug
-          }
-          Serial.print("\n"); //debug
+          
+          check = getstr();
          
           if (check == "OK+CONNA") //se verificado que o módulo entendeu o comando, limpa a string e prossegue
           {
           check.remove(0); //se o ble entendeu o comando, limpa a string e prossegue
-          Serial.print("milestone 1\n"); //debug
           }
-          else 
-          {
-            if (check == "OK+CONNAOK+CONN") 
-            {
-              check.remove(0);
-              return(1); //para o caso da conexão ser estabelecida entre uma tentativa e outra
-            }
+//          else 
+//          {
+//            if (check == "OK+CONNAOK+CONN") 
+//            {
+//              check.remove(0);
+//              return(1); //para o caso da conexão ser estabelecida entre uma tentativa e outra
+//            }
             else return (-1); //se nao, retornar erro desconhecido
-          }
+//          }
           
-          while(!mySerial.available()) {} //espera a segunda parte da mensagem
-          
-          Serial.print("milestone 3\n"); //debug
-          
-          while (mySerial.available() > 0)  //transfere o buffer do mySerial para a string check ---- a intenção é identificar o OK+CONN ou o OK+CONNF
-          {
-              c = mySerial.read();
-              check += c;
-              Serial.print(c); //debug
-              delay(10);  //TIRAR ESSE DELAY QUEBRA O CODIGO DE JEITOS BIZARROS!!! 
-          }
-          Serial.print("\n"); //debug
+          check = getstr();
           
           if (check == "OK+CONN")    //verifica se a conexao foi efetuada 
           {
@@ -179,14 +232,8 @@ int connect(String MAC, int err)
 int disconnect()
 {
           mySerial.write("AT");  //Se o modulo estiver conectado, AT termina a conexao
-          delay(1000);
-          while (mySerial.available() > 0)  //transfere o buffer do mySerial para a string check --- intenção é receber OK+LOST ou OK
-          {
-              c = mySerial.read();
-              check += c;
-          }
-          Serial.println(check); //debug
-          //Serial.print("\n"); //debug
+          
+          check = getstr();
           
           if (check == "OK+LOST")
             {
@@ -201,6 +248,48 @@ int disconnect()
 }
 
 //------------------------------------------------------END DISCONNECT---------------------------------------------------------
+
+
+//------------------------------------------------------CHECKSUM---------------------------------------------------------------
+
+char checksum(String data)
+{
+  char checksum = 0;
+  int i = 0;
+  while (i < data.length())
+  {
+    checksum = checksum + data.charAt(i);
+    i++;
+  }
+  return(checksum);
+}
+
+//------------------------------------------------------END CHECKSUM-----------------------------------------------------------
+
+
+//------------------------------------------------------SEND--------------------------------------------------------------
+
+int send(String idr, String data)
+{
+    //colocar o mac do modulo que esta sendo gravado aqui
+    String ids = "78A5048C4A04";  //green
+    //String ids = "78A5048C47AF";  //yellow
+    
+    String buff = "";
+    buff = ids + idr + data;
+    char cs = checksum(data);
+    buff = buff + cs;
+    Serial.write("foi : ");
+    Serial.print(buff);
+    Serial.write("\n");
+    mySerial.print(buff);
+}
+
+//------------------------------------------------------SEND--------------------------------------------------------------
+
+
+
+
 
 
 
