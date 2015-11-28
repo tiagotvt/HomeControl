@@ -1,13 +1,8 @@
-//MASTER mac address: 78A5048C378C
-//YELLOW mac address: 78A5048C47AF
-//GREEN mac address:  78A5048C4A04
+//setup
 
-
-#include <stdio.h>
 #include <string.h>
 #include <errno.h>
-//#include <wiringSerial.h>
-//prototipos das funcoes
+
 char* getstr(char* buff);
 int connect(char* MAC);
 int disconnect(void);
@@ -15,20 +10,6 @@ struct packet getpkt( void );
 char checksum(char* data);
 int send(char* idr, char*data);
 
-int fd ;
-struct packet
-{
-  char ids[20];
-  char idr[20];
-  char data[150];
-  char cs;
-};
-
-const struct packet errorpkt = {"000000000000","000000000000","error",0};
-
-int main ()
-{
-//setup part
 if ((fd = serialOpen ("/dev/ttyAMA0", 9600)) < 0)
 {
    fprintf (stderr, "Unable to open serial device: %s\n", strerror (errno)) ;
@@ -36,105 +17,17 @@ if ((fd = serialOpen ("/dev/ttyAMA0", 9600)) < 0)
 }
 
 int t;
-int u1, u2, u3;
+int u1, u2;
 char check[150];
 char user[30];
-char MAC[20];
+char MAC[12];
 struct packet pkin, pkout;
 
-//loop part
-while(1)
-{
-    puts("Selecione a operacao desejada:");
-    puts("1: conectar a outra unidade");
-    puts("2: desconectar a unidade");
-    puts("3: enviar comando");
-    puts("4: enviar dados");
-    puts("5: receber dados");
-    scanf("%i", &u1); //recebe o comando do usuario (1 ou 2)
-    switch(u1)
-    {
-    case 1:
-        puts("Com qual unidade deseja se conectar?");
-        puts("1: Green");
-        puts("2: Yellow");
-        scanf("%i", &u2);
-        switch(u2)
-        {
-        case 1:
-            strcpy(MAC,"78A5048C4A04");
-            connect(MAC);
-            break;
-        case 2:
-            strcpy(MAC,"78A5048C47AF");
-            connect(MAC);
-            break;
-        default:
-            puts("opção inválida!");
-            break;
-        }
-        break;
-    case 2:
-        t = disconnect();
-        if (t==0) puts("desconectado!");
-        else if (t==3) puts("ja estava desconectado!");
-        break;
-    case 3:
-        puts("Digite o comando que quer enviar");
-        scanf("%s",user);
-        serialPuts (fd, user);
-        delay(100);
-        getstr(check);
-        break;
-    case 4:
-        puts("Com qual unidade deseja se conectar?");
-        puts("1: Green");
-        puts("2: Yellow");
-        scanf("%i", &u3);
-        switch(u3)
-        {
-        case 1:
-            strcpy(MAC,"78A5048C4A04");
-            puts("Digite a mensagem que quer enviar");
-            printf("%s\n", MAC); //debug
-            scanf("%s",user);
-            printf("%s\n", MAC); //debug
-            send(MAC, user);
-            user[0] = '\0';
-            break;
-        case 2:
-            strcpy(MAC,"78A5048C47AF");
-            puts("Digite a mensagem que quer enviar");
-            scanf("%s",user);
-            send(MAC, user);
-            user[0] = '\0';
-            break;
-        default:
-            puts("opção inválida!");
-            break;
-        }
-        break;
-    case 5:
-        puts("Recebendo");
-        pkin = getpkt();
-        printf("%s \n", pkin.data);
-        break;
-    default:
-        puts("opção inválida!");
-        break;
-    }
-    delay(200);
-    serialFlush (fd);
-}
-
-}
-
+//fucntions
 char* getstr(char* buff)
 {
     int i = 0;
     int j = 0;
-
-    //serialFlush(fd);
 
     while(!serialDataAvail(fd) && i<1000)
     {
@@ -164,7 +57,7 @@ char* getstr(char* buff)
 
 int connect(char* MAC)
 {
-    char check[30];
+    char check[10];
     char buff[20];
     int err;
 
@@ -214,8 +107,7 @@ int disconnect()
 
     if ((strcmp(check,"OK+LOST") == 0))
     {
-        check[0] = '\0';
-        delay(500);
+        check[0] = 0;
         serialPuts (fd,"AT+ROLE0");
         getstr(check);
         return(0); //retorno 0 indica que a desconxao foi feita
@@ -223,8 +115,7 @@ int disconnect()
 
     else if ((strcmp(check,"OK") == 0))
     {
-        check[0] = '\0';
-        delay(500);
+        check[0] = 0;
         serialPuts (fd,"AT+ROLE0");
         getstr(check);
         return(3); //retorno 3 indica que nao havia conexao para ser desfeita
@@ -239,8 +130,6 @@ struct packet getpkt( void )
     char buff[193];
     struct packet ret;
 
-    //serialFlush(fd);
-
     for (z=0; z<3; z++)
     {
         while(!serialDataAvail(fd) && i<1000)
@@ -252,10 +141,10 @@ struct packet getpkt( void )
         if (i== 1000)
         {
             printf("sem dados no serial\n");
-            ret.ids[0] = '\0';
-            ret.idr[0] = '\0';
+            ret.ids[0] = 0;
+            ret.idr[0] = 0;
             strcpy(ret.data,"erro");
-            ret.cs = '\0';
+            ret.cs = 0;
             return(ret);
         }
 
@@ -268,13 +157,6 @@ struct packet getpkt( void )
         buff[j] = '\0';
 
         printf("%s \n", buff); //debug
-
-        if (j<23)
-        {
-            ret = errorpkt;
-            strcpy(ret.data,buff);
-            return(ret);
-        }
 
         strncpy(ret.ids,buff,12);
         ret.ids[12] = '\0';
@@ -289,7 +171,7 @@ struct packet getpkt( void )
 
         if (ret.cs == checksum(ret.data))
         {
-            send(ret.ids,"CSOK");
+            send(ret.idr,"CSOK");
             return(ret);
         }
     }
@@ -320,18 +202,10 @@ int send(char* idr, char* data)
     struct packet temp;
     int z;
 
-    //printf("%s\n", data); //debug
-
     strcat(buff,ids);
     strcat(buff,idr);
     strcat(buff,data);
     strcat(buff,cs);
-
-    //printf("%s\n", ids); //debug
-    //printf("%s\n", idr); //debug
-    //printf("%s\n", data); //debug
-    //printf("%s\n", cs); //debug
-    //printf("%s\n", buff); //debug
 
     for (z=0; z<3; z++)
     {
@@ -339,11 +213,11 @@ int send(char* idr, char* data)
         if (strcmp(data,"CSOK") == 0) return(0); //excecao para impedir um loop infinito de confirmacao
         if (strcmp(data,"CSFAIL") == 0) return(0); //excecao para impedir um loop infinito de confirmacao
         temp = getpkt();
-        if (strcmp(temp.data,"CSOK") == 0) return (0);
-        if (strcmp(temp.data,"OK+LOST") == 0) return (0);
+        if (strcmp(temp.data,"CSOK") == 0)
+        {
+            return(0);
+        }
     }
     return(1);
 }
-
-
 

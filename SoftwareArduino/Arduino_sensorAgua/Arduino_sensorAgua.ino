@@ -24,8 +24,10 @@ int i = 0;
 int conn;
 char sum;
 char cs;
+int agua;
+int trigger = 0;
 
-packet pkt, pkin, pkout;
+packet pkin, pkout;
 
 void setup()
 {
@@ -54,7 +56,7 @@ void loop() // run over and over
       if (digitalRead(botao1) == 1)  //verifica o estado do botao e executa se ele estiver pressionado
       {
           Serial.write("\n\nconectando\n");  //avisa que a rotina foi iniciada
-          conn = connect(yellow);
+          conn = connect(master);
           if (conn == 1) Serial.print("conectou\n");
           else
           { 
@@ -88,11 +90,63 @@ void loop() // run over and over
       }
 
 //loop para passar as mensagens entre o serial virtual e o TX RX (serve para permitir que voce mande comandos ao modulo pelo terminal)    
-      if (mySerial.available())
+/*      if (mySerial.available())
           Serial.write(mySerial.read());
       if (Serial.available())
           mySerial.write(Serial.read());
+*/
 
+//leitura do sensor de agua
+      agua = analogRead(A3);
+      Serial.print (agua);
+      Serial.write("\n");
+      if (agua > 400)
+      {
+        if (trigger == 0)
+        {
+          if (connect(yellow)==0) 
+          {
+            trigger = 1;
+            delay(500);
+            send(yellow, "fechajanela");
+            delay(500);
+            disconnect();
+          }
+        }
+      }
+      if (agua < 400)
+      {
+        if (trigger == 1)
+        {
+          if (connect(yellow)==0) 
+          {
+            trigger = 0;
+            delay(500);
+            send(yellow, "abrejanela");
+            delay(500);
+            disconnect();
+          }
+        }
+      }
+
+//loop para esperar solicitacao do master
+      if (mySerial.available())
+      {
+        pkin = getpkt();
+        if (pkin.data == "OK+CONN")
+          conn = 1;
+        if (pkin.data == "OK+LOST")
+          disconnect();
+          conn = 0;
+        if (pkin.data == "agua")
+        {
+          delay(500);
+          agua = analogRead(A3);
+          stout = "";
+          stout += agua;
+          send(pkin.ids, stout);
+        } 
+      }
 }
 
 

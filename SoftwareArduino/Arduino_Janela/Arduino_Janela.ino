@@ -24,8 +24,10 @@ int i = 0;
 int conn;
 char sum;
 char cs;
+int agua;
+int estado = 0;
 
-packet pkt, pkin, pkout;
+packet pkin, pkout;
 
 void setup()
 {
@@ -54,7 +56,7 @@ void loop() // run over and over
       if (digitalRead(botao1) == 1)  //verifica o estado do botao e executa se ele estiver pressionado
       {
           Serial.write("\n\nconectando\n");  //avisa que a rotina foi iniciada
-          conn = connect(yellow);
+          conn = connect(master);
           if (conn == 1) Serial.print("conectou\n");
           else
           { 
@@ -88,11 +90,38 @@ void loop() // run over and over
       }
 
 //loop para passar as mensagens entre o serial virtual e o TX RX (serve para permitir que voce mande comandos ao modulo pelo terminal)    
-      if (mySerial.available())
+/*      if (mySerial.available())
           Serial.write(mySerial.read());
       if (Serial.available())
           mySerial.write(Serial.read());
+*/
 
+//loop para esperar solicitacao do master
+      if (mySerial.available())
+      {
+        pkin = getpkt();
+        if (pkin.data == "OK+CONN")
+          conn = 1;
+        if (pkin.data == "OK+LOST")
+          disconnect();
+          conn = 0;
+        if (pkin.data == "abrejanela")
+        {
+          digitalWrite(13,HIGH);
+          estado = 1;
+        } 
+        if (pkin.data == "fechajanela")
+        {
+          digitalWrite(13,LOW);
+          estado = 0;
+        }
+        if (pkin.data == "estadojanela")
+        {
+          delay(500);
+          if (estado == 1) send (pkin.ids, "Janela aberta");
+          if (estado == 0) send (pkin.ids, "Janela fechada");
+        }
+      }
 }
 
 

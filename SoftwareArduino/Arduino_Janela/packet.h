@@ -21,7 +21,7 @@ int bounce(packet);
 
 const packet errorpkt = {"000000000000", "000000000000", "error", 0};
 
-
+packet pkt;
 String check = "";
 
 String idlocal = "78A5048C47AF";
@@ -77,6 +77,7 @@ packet getpkt()
   int l;
   int i = 0;
 
+  //mySerial.flush();
 
   for (int z = 0; z < 3; z++)
   {
@@ -139,7 +140,7 @@ String getstr()
   String buff = "";
   int i = 0;
 
-  mySerial.flush();
+  //mySerial.flush();
 
   while (!mySerial.available() && i < 1000 ) //espera a informacao comecar a chegar. Se demorar mais de 10s cancela
   {
@@ -172,7 +173,7 @@ int connect(String MAC)
 {
   mySerial.write("AT+ROLE1");  //coloca o modulo em modo master para se conectar a outro
   delay(800);
-  check = getstr();
+  pkt = getpkt();
 
   int err;
   MAC = "AT+CON" + MAC;
@@ -181,24 +182,24 @@ int connect(String MAC)
     mySerial.print(MAC);  //conecta com o modulo especificado pelo mac
 
 //    Serial.print(MAC);
-    check = getstr();
+    pkt = getpkt();
 
-    if (check == "OK+CONNA") //se verificado que o módulo entendeu o comando, limpa a string e prossegue
+    if (pkt.data == "OK+CONNA") //se verificado que o módulo entendeu o comando, limpa a string e prossegue
     {
-      check.remove(0); //se o ble entendeu o comando, limpa a string e prossegue
+      pkt.data.remove(0); //se o ble entendeu o comando, limpa a string e prossegue
     }
     else return (-1); //se nao, retornar erro desconhecido
 
-    check = getstr();
+    pkt = getpkt();
 
-    if (check == "OK+CONN")    //verifica se a conexao foi efetuada
+    if (pkt.data == "OK+CONN")    //verifica se a conexao foi efetuada
     {
-      check.remove(0);
+      pkt.data.remove(0);
       return (1);
     }
   }
 
-  check.remove(0);
+  pkt.data.remove(0);
   return (0);
 
 }
@@ -214,20 +215,20 @@ int disconnect()
 
   if (check == "OK+LOST")
   {
-    Serial.write("disco\n");
-    check.remove(0);
+    delay(500);
     mySerial.write("AT+ROLE0");  //coloca o modulo em modo slave para ficar disponivel a receber conexoes
-    delay(800);
     check = getstr();
     return (0);
   }
   else if (check == "OK")
   {
+    delay(500);
     check.remove(0);
     mySerial.write("AT+ROLE0");  //coloca o modulo em modo slave para ficar disponivel a receber conexoes
     check = getstr();
     return (-1);
   }
+  return(-2);
 }
 
 //------------------------------------------------------END DISCONNECT---------------------------------------------------------
@@ -246,12 +247,14 @@ int bounce(packet foward)
   Serial.write("\nmark 4\n");
   reply = getpkt();
   Serial.write("\nmark 5\n");
+  delay(500);
   disconnect();
   Serial.write("\nmark 6\n");
-//  connect(foward.ids);
-//  Serial.write("\nmark 7\n");
-//  send(foward.ids,reply.data);
-//  Serial.write("\nmark 8\n");
+  connect(foward.ids);
+  Serial.write("\nmark 7\n");
+  delay(2000);  //DIMINUIR ESSE DELAY - ESTA ALTO PARA PERMITIR QUE A RASP SEJA COLOCADA EM GETPKT MANUALMENTE
+  send(foward.ids,reply.data);
+  Serial.write("\nmark 8\n");
   return(0);
 }
 
