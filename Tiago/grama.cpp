@@ -2,6 +2,7 @@
 #include <fstream>
 #include <stdio.h>
 #include <math.h>
+#include <string>
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
@@ -36,8 +37,35 @@ struct sprinkler {
   int orientation;
 };
 
-vector<Point> userPoints;
+/*  This function gets the % of raining from the weather file.
+*   It saves 4 values.
+*   [CurrentWeather  Morning  Noon  Evening  Night]
+*
+*/
+void isRaining()
+{
+  ifstream rainfile("rain.txt");
+  ofstream rain2file("rainFinal.txt");
+  string rainStr;
+  int i=0;
+  while ( i < 4 )
+  {
+    rainfile >> rainStr;
+    size_t found = rainStr.find('%');
+    if(found != -1)
+    {
+      cout << rainStr << " ";
+      rain2file << rainStr.substr(0, found) << " ";
+      i++;
+    }
+  }
+  rain2file.close();
+  rainfile.close();
+}
 
+/*  This function returns the distance between a block and a sprinkler.
+*
+*/
 float dist (sprinkler sp, int x, int y, int blockSize)
 {
   float posx=0, posy=0, difX, difY;
@@ -51,6 +79,10 @@ float dist (sprinkler sp, int x, int y, int blockSize)
   return (sqrt(pow(difY,2)+pow(difX,2)));
 }
 
+/*  This function returns the angle that a certain sprinkler 
+*   needs to have to water a certain block.
+*
+*/
 int calc_angle(sprinkler sp, int x, int y, int blockSize)
 {
   int posx=0, posy=0, difX, difY;
@@ -90,16 +122,10 @@ int calc_angle(sprinkler sp, int x, int y, int blockSize)
   } 
 }
 
-void CallBackFunc (int event, int x, int y, int flags, void* userdata)
-{
-
-  if(event == EVENT_LBUTTONDOWN)
-  {
-    cout << "Click in (" << x << ", " << y << ")" << endl;
-    userPoints.push_back(Point(x,y)); 
-  }
-}
-
+/*  This function simply draws a red grid in the image
+*   depending the size of the blocks.
+*
+*/
 void makeGrid(Mat image, int step)
 {
   int width = image.size().width;
@@ -112,27 +138,11 @@ void makeGrid(Mat image, int step)
       line(image, Point(i, 0), Point(i, height), Scalar(0, 0, 255),2);
 }
 
-bool testBlock(Mat image, Mat mask, int blockX, int blockY, int blockSize, int sqr, range grass, range outlier)
-{
-  int posX = 0, posY = 0;
-  /* Passar o vetor por address*/
-  /* Colocar no bloquinho (0,0) do BLOCK, no centro dele */
-  posX += (blockX*blockSize*sqr)+(sqr/2);
-  posY += (blockY*blockSize*sqr)+(sqr/2);
-
-
-  int col,row;
-
-  for (row=0; row < blockSize; row++)
-  {
-    for (col=0; col < blockSize; col++)
-    {
-      posX = 0;
-    }
-  }
-}
-
-//void mapping(Mat image, Mat mask, int blockX, int blockY, int blockSize, int sqr, map blockMap[])
+/*  This function "maps" the squares that are considered unhealty grass
+*   and put all the [(x,y) square position, (x,y) block position] in a
+*   vector of structs. 
+*
+*/
 void mapping(Mat image, Mat mask, int sqr_row, int sqr_col, int blockSize, int sqr, vector<mapBlock> &blockMap)
 {
   int posX = 0, posY = 0, row, col, temp=0, sqr_num=0;
@@ -171,33 +181,17 @@ void mapping(Mat image, Mat mask, int sqr_row, int sqr_col, int blockSize, int s
       posY += sqr;
     }
   }
-  /*********************/
-  /*
-  for (row=0; row < blockSize; row++)
-  {
-    for (col=0; col < blockSize; col++)
-    {
-      if(image.at<Vec3b>(posY, posX) != Vec3b(0,0,0))
-      {
-        blockMap[temp].posX = posX;
-        blockMap[temp].posY = posY;
-      }
-    posX += (col+1)*sqr;
-    if(posX > image.cols) break;
-    }
 
-    posX = (blockX*blockSize*sqr)+(sqr/2);    //volta para o começo das colunas
-    posY += (row+1)*sqr;
-    if(posY > image.rows) break;
-    
-  }
-  */
   printf("TESTEEEEEEEE");
 }
 
 int main( int argc, char** argv )
 {
+  //Command to get the weather file
+  system("curl wttr.in/'Sao Carlos' > rain.txt");
   range GRASS, good;
+
+  //Gets the Range of healthy grass from a file.
   ifstream ipfile("data.txt");
   ipfile >> good.min[0]>>good.min[1]>>good.min[2];
   ipfile >> good.max[0]>>good.max[1]>>good.max[2];
@@ -213,7 +207,7 @@ int main( int argc, char** argv )
   int tmp;
   vector<sprinkler> sprinklerVec;
   ifstream spfile("sprinkler.txt");
-
+  //Gets the sprinkler data from a file.
   for(tmp = 0; tmp < 6; tmp++)
   {
     sprinklerVec.push_back(sprinkler());
@@ -228,6 +222,7 @@ int main( int argc, char** argv )
   int blockSize = sqr*5;
   Mat src = imread( argv[1],1);
 
+  //If the image is not a multiple of "sqr", we round it up
   int sqr_row = src.rows/sqr;  
   if (src.rows%sqr > 0) sqr_row = (src.rows/sqr)+1;
 
@@ -235,14 +230,13 @@ int main( int argc, char** argv )
   if (src.cols%sqr > 0) sqr_col = (src.cols/sqr)+1;
 
 
-  int MAX_BLACK_PIXEL = (sqr*sqr)*0.60;  //No máximo 30% dos pixels por quadrado pode ser preto
+  int MAX_BLACK_PIXEL = (sqr*sqr)*0.60;               //40% of the squared pixels can be black.
 
   blur( src, src, Size(2,2) );
-  cvtColor(src,HSV,CV_BGR2HSV);
-  inRange(HSV,GRASS.min,GRASS.max,threshold);
+  cvtColor(src,HSV,CV_BGR2HSV);                       //Transform a BGR image to a HSV.
+  inRange(HSV,GRASS.min,GRASS.max,threshold);         //Gets a threshold image from the initial image, based in the ranges
   Mat element = getStructuringElement( MORPH_RECT,Size( 2*dilation_size + 1, 2*dilation_size+1 ), Point( dilation_size, dilation_size ) );
   morphologyEx( threshold, dst, MORPH_CLOSE, element );
-  
 
   int minBound=dst.rows;
   int maxBound=0;
@@ -259,17 +253,14 @@ int main( int argc, char** argv )
     if(tmp>maxBound) maxBound=tmp;
   }
 
-    // Copia todos os pixels da imagem original que não são pretos no threshold
+    // Copy all pixels from the original image that are not black in the threshold image.
     src.copyTo(final, threshold);
 
-  //line(dst, Point(0,minBound), Point(dst.cols,minBound),  Scalar(0), 1,8, 0); //minmum boudary
-  //line(dst, Point(0,maxBound), Point(dst.cols,maxBound),  Scalar(255), 1,8, 0); // maximum boundary
-  //line(src, Point(0,minBound), Point(dst.cols,minBound),  Scalar(0,0,255), 1,8, 0); //minmum boudary
-  //line(src, Point(0,maxBound), Point(dst.cols,maxBound),  Scalar(0,0,255), 1,8, 0); // maximum boundary
+  imwrite( "HSV.jpg", src );
+  src.release();
 
-    // Fazer o Average da cor dos pixels por area
-
-
+/* Starts to calculate the average pixel color by area
+****************************************************************************************************/
   Vec3b cont;
   Mat final_sqr = Mat::zeros(sqr_row*sqr,sqr_col*sqr, CV_8UC3);
   int x_cont, y_cont, sqr_num=0,sqr_num_x=0,sqr_num_y=0, avg_temp=0, non_black=0;
@@ -326,14 +317,15 @@ int main( int argc, char** argv )
     printf("%d  \n",sqr_num_x);
     printf("TESTEEE3\n");
   }
-
+/* Ends to calculate the average pixel color by area
+****************************************************************************************************/
 /*******Testing*******/
   imwrite( "sqr.jpg", final_sqr );
   RGB = imread( "sqr.jpg");
   Mat mask,mask2;
   inRange(RGB,good.min,good.max,mask);
 
-  // Copia todos os pixels da imagem original que não são pretos no threshold
+  //Copy all pixels from the squared image, that are not black in the mask image,to the new mask.
   final_sqr.copyTo(mask2, mask);
   vector<mapBlock> blockMap;
   vector<block> blockError;
@@ -348,35 +340,10 @@ int main( int argc, char** argv )
   }
 
   makeGrid(RGB, blockSize);
-  namedWindow ("Display Grid", WINDOW_FREERATIO);
-  imshow("Display Grid", RGB);
-  setMouseCallback("Display Grid", CallBackFunc, 0);
-  waitKey(0);
+  
   block blockTemp;
   bool notSameBlock = true;
   int tmp2;
-
-  for(tmp=0; tmp < userPoints.size(); tmp++)
-  {
-    blockTemp.x = (userPoints[tmp].x/blockSize);
-    blockTemp.y = (userPoints[tmp].y/blockSize); 
-
-    for(tmp2=0; tmp2 < blockError.size(); tmp2++)
-    {
-      if((blockTemp.x == blockError[tmp2].x) && (blockTemp.y == blockError[tmp2].y))
-        notSameBlock = false;
-    }
-    if(notSameBlock)
-      blockError.push_back(blockTemp);
-
-    notSameBlock = true;
-  }
-
-  for(tmp=0; tmp < blockError.size(); tmp++)
-  {
-    cout << blockError[tmp].x << " " << blockError[tmp].y <<"\n";
-  }
-
   
   for(tmp=0; tmp < sprinklerVec.size(); tmp++)
   {
@@ -449,12 +416,11 @@ for(tmp=0; tmp < blockMap.size(); tmp++)
   ipfile3.close();
 /******END CHOOSING SPRINKLER***/
   imwrite( "sqr.jpg", final_sqr );
-  imwrite( "rgb.jpg", RGB );
   imwrite( "MASK.jpg", mask );
   imwrite( "MASK2.jpg", mask2 );
   imwrite( "threshold.jpg", threshold );
   imwrite( "dst.jpg", dst );
-  imwrite( "HSV.jpg", src );
+  
   imwrite( "final.jpg", final );
 
   
@@ -465,5 +431,6 @@ for(tmp=0; tmp < blockMap.size(); tmp++)
   //imshow( "dst", dst );
   printf("%d\n", sqr_col);
   printf("%d\n", sqr_row);
+  isRaining();
   return 0;
 }
